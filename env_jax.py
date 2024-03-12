@@ -106,7 +106,7 @@ def get_pendulum_res(model, t = jnp.linspace(0, 5,100), y0 = jnp.zeros(2),
 
 #for use in lax.scan
 #i is unused
-def pendulum_1step(carry,i, max_speed = 1, g = 2.0):
+def pendulum_1step(carry,i, max_speed = 8., g = 2.0):
 	s, a,w,p,beta = carry
 	# g = 10.0
 	m = 1.0
@@ -122,6 +122,7 @@ def pendulum_1step(carry,i, max_speed = 1, g = 2.0):
 	pi_s = jnp.dot(alpha_s/jnp.sum(alpha_s),a)	
 	s = s.at[1].set(s[1] + (3. * g/(2. * l) * jnp.sin(s[0]) + 3./(m * l**2) * pi_s) * dt)
 	s = s.at[1].set(jnp.clip(s[1], -max_speed, max_speed))
+	# print("state is: ", s)
 	# jax.debug.print("s1:{s1}, pi_s:{pi}", s1 = s[1] + (3. * g/(2. * l) * jnp.sin(s[0]) + 3./(m * l**2) * pi_s) * dt, pi = pi_s)
 	s = s.at[0].set(s[0] + s[1]*dt) 
 	s = s.at[0].set((s[0] + jnp.pi) % (2.*jnp.pi) -jnp.pi) #angle normalization

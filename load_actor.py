@@ -66,52 +66,52 @@ def main(env = "gmfm", in_path = None, out_path = None, iter_idx = 100,
     "text.usetex": True,
     "font.family": "Helvetica"
 })
-	if env == "gmfm":
-		plt.plot(ts[:300], y_all[:300,0], label = "sparse clustering")
-		plt.plot(ts[:300], y_baseline[:300,0], label = "baseline")
-	else: 
-		plt.plot(ts, y_all[:,0], label = "sparse clustering")
-		plt.plot(ts, y_baseline[:,0], label = "baseline")
-		# print("y baseline[:,0] traj", y_baseline[:,0])
-		# print("y baseline[:,0] traj", y_baseline[:,0])
 
-	plt.xlabel("time (s)")
-	plt.ylabel("$s_1$")
-	plt.legend()
-	# plt.title("s0 plot")
-	plt.grid()
-	if env == "gmfm":
-		plt.savefig(out_path + "s1_vs_baseline_traj_%s_iter_idx=%d.pdf" % (env, iter_idx), 
+	for idx in range(y_all.shape[1]):
+		if env == "gmfm":
+			plt.plot(ts[:300], y_all[:300,idx], label = "sparse clustering")
+			plt.plot(ts[:300], y_baseline[:300,idx], label = "baseline")
+		elif env == "pendulum": 
+			plt.plot(ts, y_all[:,idx], label = "sparse clustering")
+			plt.plot(ts, y_baseline[:,idx], label = "baseline")
+			if idx ==0:
+				plt.ylabel(r"$\rho$" )
+			elif idx == 1:
+				plt.ylabel(r"$\dot{\rho}$")
+
+		plt.xlabel("time (s)")
+		plt.legend()
+		# plt.title("s0 plot")
+		plt.grid()
+		plt.savefig(out_path + "s%d_vs_baseline_traj_%s_iter_idx=%d.pdf" % (idx +1, env, iter_idx), 
 			bbox_inches = 'tight')
-	else:
-		plt.savefig(out_path + "s1_traj_%s_iter_idx=%d.pdf" % (env,iter_idx), bbox_inches = 'tight')
-	plt.close()
-	# plt.plot(ts, pi_all)
-	# plt.title("pi_s plot")
-	# plt.grid()
-	# plt.savefig("pi_traj_%s.pdf" % env, bbox_inches = 'tight')
-	# plt.close()
+		plt.close()
+
 	plt.scatter(p[:,0],p[:,1], c = "#440154")
 	plt.savefig(out_path + "anchor_location_%s_iter_idx=%d.pdf" % (env,iter_idx), bbox_inches = 'tight')
 	plt.scatter(p[:,0],p[:,1], c = w, cmap = 'viridis')
-	plt.xlabel("$s_1$")
-	plt.ylabel("$s_2$")
+	if env == 'pendulum':
+		plt.xlabel(r"$\rho$")
+		plt.ylabel(r"$\dot{\rho}$")
+	else:
+		plt.xlabel(r"$s_1$")
+		plt.ylabel(r"$s_2$")
 	plt.colorbar()
 	plt.savefig(out_path + "w_heatmap_%s_after_iter_idx=%d.pdf" % (env,iter_idx), bbox_inches = 'tight')
 	plt.close()
 
 	if env == "pendulum" and visualize == True:
-		pend = PendulumEnv(g = 2.0, max_speed = 1.0,max_episode_steps = 100)
+		pend = PendulumEnv(g = 2.0, max_speed = 2.0,max_episode_steps = 120)
 		init_state = np.asarray(y0)
 		cmd = np.asarray(pi_all)
-		pend.visualize(init_state = init_state, cmd = cmd[:-5])
+		pend.visualize(init_state = init_state, cmd = cmd[:])
 
 if __name__ == '__main__':
 	# env = "gmfm"
 	env = 'pendulum'
 	in_path = "policies/%s/" % env
 	out_path = 'plots/%s/' % env
-	iter_idx = 499
-	main(env, in_path = in_path, out_path = out_path, iter_idx = iter_idx, visualize = True)
+	iter_idx = 700
+	main(env, in_path = in_path, out_path = out_path, iter_idx = iter_idx, visualize = False)
 
 

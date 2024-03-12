@@ -54,8 +54,8 @@ def eval_policy_lorenz(params,p ,y0 = jnp.ones(3),xref = jnp.ones(3), gamma = 0.
 	jax.debug.print("policy cost is {x} here, l1 cost = {s}", x = policy_cost, s = l1_cost)
 	return J
 
-def eval_policy_pendulum(params,p ,y0 = jnp.ones(2),xref = jnp.zeros(2), 
-	gamma = 0.1, t = jnp.linspace(0,5,100), l1_penalty = 0.01, n_steps = 120):
+def eval_policy_pendulum(params,p ,y0 = jnp.ones(2),xref = jnp.zeros(2), gamma_thdot = 0.1,
+	gamma_u = 0.001, l1_penalty = 0.01, n_steps = 120):
 	policy = [params['a'],params['w'],p,params['beta']]
 	# policy = [params['a'],params['w'],p,beta]
 	# print(len(policy))
@@ -67,7 +67,7 @@ def eval_policy_pendulum(params,p ,y0 = jnp.ones(2),xref = jnp.zeros(2),
 	# y_all_th = y_all[:,0]
 	# y_all_th = y_all_th.at[y_all_th > jnp.pi].set(y_all_th[y_all_th > jnp.pi] - 2 * jnp.pi) #normalization for cost
 	y_all = y_all.at[:,0].set((y_all[:,0] + jnp.pi) % (2 * jnp.pi) - jnp.pi) #normalize for angle
-	policy_cost = jnp.mean(jnp.linalg.norm(y_all - xref, axis = 1)**2) + gamma * jnp.mean(pi_all **2)
+	policy_cost = jnp.mean((y_all[:,0] - xref[0])**2) + gamma_thdot * jnp.mean((y_all[:,1] - xref[1])**2) + gamma_u * jnp.mean(pi_all **2)
 	l1_cost =  l1_penalty * jnp.linalg.norm(params['w'], ord = 1)
 	J = policy_cost + l1_cost
 	# jax.debug.print("y_all max: {x}", x = jnp.max(jnp.abs(y_all), axis = 0))
@@ -102,9 +102,9 @@ def init_lorenz_actor(beta = 1.0):
 	actor = sparse_actor(a0,w0,p0,beta)
 	return actor
 
-def init_pendulum_actor(beta  = jnp.array([0.5,0.5]), max_speed = 1.):
-	D1 = 50
-	D2 = 10
+def init_pendulum_actor(beta  = jnp.array([0.5,0.5]), max_speed = 2.):
+	D1 = 60
+	D2 = 20
 	D = D1 * D2
 	# s_bounds = [[0,2 * jnp.pi],[-8,8]]
 	# s_bounds = [[0,2 * jnp.pi],[-max_speed,max_speed]]
@@ -150,7 +150,7 @@ def init_gmfm_actor(beta  = 0.1):
 	return actor
 
 
-def main(env = 'gmfm', save_freq = 50):
+def main(env = 'gmfm', save_freq = 50, max_steps = 120):
 	#first init sparse actor
 	if env == 'gmfm':
 		actor = init_gmfm_actor(beta = 0.1)
@@ -174,7 +174,8 @@ def main(env = 'gmfm', save_freq = 50):
 		eval_policy_fn = eval_policy_pendulum
 
 	#next train sparse actor
-	max_iters =500
+	# max_iters =1000
+	max_iters =700
 	# l1_penalty = 0.0
 	beta_bounds = jnp.array([0,1])
 	# optimizer = optax.adabelief(1e-3)
@@ -184,10 +185,15 @@ def main(env = 'gmfm', save_freq = 50):
 	# params = {'a': actor.a, 'w':actor.w}
 	# print(f"hey: {params['beta']}")
 	opt_params = optimizer.init(params)
-	init_res = eval_policy_fn(params, actor.p,y0, xref, n_steps = 120)
+	init_res = eval_policy_fn(params, actor.p,y0, xref, n_steps = max_steps)
 	# print("init res here:", init_res)
 	for i in range(max_iters):
-		grads = jax.grad(eval_policy_fn)(params, actor.p,y0, xref, n_steps = 120)
+		key = jax.random.PRNGKey(i)
+		# rand_y0 = jax.random.uniform(key = key, shape = (2,), 
+		# 	minval = jnp.array([-jnp.pi,-.5]), maxval = jnp.array([jnp.pi, .5]))
+		# print("rand_y0", rand_y0)
+		# grads = jax.grad(eval_policy_fn)(params, actor.p,rand_y0, xref, n_steps = 120)
+		grads = jax.grad(eval_policy_fn)(params, actor.p,y0, xref, n_steps = max_steps)
 		# grads = jax.grad(test_loss)(params)
 		# print("yo", grads)
 		updates,opt_params = optimizer.update(grads, opt_params)
@@ -220,6 +226,7 @@ def main(env = 'gmfm', save_freq = 50):
 			actor_info['beta'] = params['beta']
 			actor_info['gamma'] = actor.gamma
 			actor_info['y0'] = y0
+			actor_info['max_steps'] = max_steps
 			pickle.dump(actor_info,f)
 			f.close()
 
@@ -229,5 +236,5 @@ def main(env = 'gmfm', save_freq = 50):
 if __name__ == '__main__':
 	t1 = time.time()
 	env = "pendulum"
-	main(env)
+	main(env, max_steps = 130, g  = 9.8)
 	print("this took %.1f seconds" % (time.time() - t1))
