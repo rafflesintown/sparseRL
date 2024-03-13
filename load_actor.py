@@ -36,6 +36,9 @@ def main(env = "gmfm", in_path = None, out_path = None, iter_idx = 100,
 	beta = actor['beta']
 	gamma = actor['gamma']
 	y0 = actor['y0']
+	g = actor['g']
+	max_speed = actor['max_speed']
+	max_steps = actor['max_steps']
 	if env == "gmfm":
 		ts = jnp.linspace(0,21 * jnp.pi,501)
 	elif env == "pendulum":
@@ -54,13 +57,14 @@ def main(env = "gmfm", in_path = None, out_path = None, iter_idx = 100,
 		y_baseline,pi_baseline = get_ode_res(gmfm_dsdt,y0 = y0, t = ts,args  = policy)
 	elif env =="pendulum":
 		# y_all, pi_all = get_pendulum_res(pendulum_dsdt, y0 = y0, t = ts, args = policy)
-		init_actor = init_pendulum_actor(beta =jnp.array([0.5,0.5]))
+		init_actor = init_pendulum_actor(beta =jnp.array([0.5,0.5]), max_speed = max_speed)
 		init_policy = [init_actor.a,init_actor.w,init_actor.p,init_actor.beta]
 		xref = jnp.array([0,0])
 		y_all, pi_all = get_pendulum_res_2(y0 = y0, args = policy, n_steps = max_steps)
 		y_baseline, pi_baseline= get_pendulum_res_2(y0 = y0, args = init_policy, n_steps = max_steps)
 	# print(y_all[-50:,:],"hey")
 	print("y_all", y_all)
+	print("pi_all", pi_all)
 	# print(jnp.mean(jnp.linalg.norm(y_all[:,:2], axis = 1)**2) + gamma * jnp.mean(pi_all **2))
 	plt.rcParams.update({
     "text.usetex": True,
@@ -101,7 +105,7 @@ def main(env = "gmfm", in_path = None, out_path = None, iter_idx = 100,
 	plt.close()
 
 	if env == "pendulum" and visualize == True:
-		pend = PendulumEnv(g = 2.0, max_speed = 2.0,max_episode_steps = 120)
+		pend = PendulumEnv(g = g, max_speed = max_speed, max_episode_steps = max_steps)
 		init_state = np.asarray(y0)
 		cmd = np.asarray(pi_all)
 		pend.visualize(init_state = init_state, cmd = cmd[:])
@@ -111,7 +115,7 @@ if __name__ == '__main__':
 	env = 'pendulum'
 	in_path = "policies/%s/" % env
 	out_path = 'plots/%s/' % env
-	iter_idx = 700
-	main(env, in_path = in_path, out_path = out_path, iter_idx = iter_idx, visualize = False)
+	iter_idx = 999
+	main(env, in_path = in_path, out_path = out_path, iter_idx = iter_idx, visualize = True)
 
 

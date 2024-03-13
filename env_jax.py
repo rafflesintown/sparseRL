@@ -107,7 +107,7 @@ def get_pendulum_res(model, t = jnp.linspace(0, 5,100), y0 = jnp.zeros(2),
 #for use in lax.scan
 #i is unused
 def pendulum_1step(carry,i, max_speed = 8., g = 2.0):
-	s, a,w,p,beta = carry
+	s, a,w,p,beta, max_speed,g = carry
 	# g = 10.0
 	m = 1.0
 	l = 1.0
@@ -128,15 +128,16 @@ def pendulum_1step(carry,i, max_speed = 8., g = 2.0):
 	s = s.at[0].set((s[0] + jnp.pi) % (2.*jnp.pi) -jnp.pi) #angle normalization
 	s_and_pi = jnp.concatenate((s,pi_s), axis = None)
 	# jax.debug.print("s and pi = {x}", x = s_and_pi)
-	return (s,a,w,p,beta), s_and_pi #carry, res to be accumulated
+	return (s,a,w,p,beta, max_speed,g), s_and_pi #carry, res to be accumulated
 
 
 def get_pendulum_res_2(args = (jnp.zeros(20),jnp.ones(20),jnp.ones((20,2)),0.1),
-	n_steps = 120,y0 = jnp.array([jnp.pi,1])):
+	n_steps = 120,y0 = jnp.array([jnp.pi,1]), max_speed = 8.0, g = 9.8):
 
 	a,w,p,beta = args
 	s_init = y0
-	final, s_pi_hist = lax.scan(pendulum_1step, (s_init,a,w,p,beta), jnp.arange(n_steps))
+	final, s_pi_hist = lax.scan(pendulum_1step, (s_init,a,w,p,beta,max_speed, g), 
+		jnp.arange(n_steps))
 	y_hist = s_pi_hist[:,:2]
 	pi_all = s_pi_hist[:,-1]
 	return (y_hist,pi_all)

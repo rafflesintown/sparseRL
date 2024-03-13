@@ -55,12 +55,13 @@ def eval_policy_lorenz(params,p ,y0 = jnp.ones(3),xref = jnp.ones(3), gamma = 0.
 	return J
 
 def eval_policy_pendulum(params,p ,y0 = jnp.ones(2),xref = jnp.zeros(2), gamma_thdot = 0.1,
-	gamma_u = 0.001, l1_penalty = 0.01, n_steps = 120):
+	gamma_u = 0.001, l1_penalty = 0.0001, n_steps = 120, max_speed = 8.0, g = 9.8):
 	policy = [params['a'],params['w'],p,params['beta']]
 	# policy = [params['a'],params['w'],p,beta]
 	# print(len(policy))
 	# y_all, pi_all = get_pendulum_res(pendulum_dsdt, t = t, y0 = y0, args = policy)
-	y_all, pi_all = get_pendulum_res_2(y0 = y0, args = policy, n_steps = n_steps)
+	y_all, pi_all = get_pendulum_res_2(y0 = y0, args = policy, n_steps = n_steps, 
+		max_speed = max_speed,g = g)
 	# print(y_all.shape, "y shape")
 	# print("y all [4]", y_all[4,:])
 	# print("testing jnp pi-all mean", pi_all)
@@ -103,8 +104,8 @@ def init_lorenz_actor(beta = 1.0):
 	return actor
 
 def init_pendulum_actor(beta  = jnp.array([0.5,0.5]), max_speed = 2.):
-	D1 = 60
-	D2 = 20
+	D1 = 100
+	D2 = 100
 	D = D1 * D2
 	# s_bounds = [[0,2 * jnp.pi],[-8,8]]
 	# s_bounds = [[0,2 * jnp.pi],[-max_speed,max_speed]]
@@ -150,7 +151,7 @@ def init_gmfm_actor(beta  = 0.1):
 	return actor
 
 
-def main(env = 'gmfm', save_freq = 50, max_steps = 120):
+def main(env = 'gmfm', save_freq = 50, max_steps = 200, max_speed = 8.0,g = 9.8, init_actor = None, init_actor_iter_idx = None):
 	#first init sparse actor
 	if env == 'gmfm':
 		actor = init_gmfm_actor(beta = 0.1)
@@ -165,7 +166,10 @@ def main(env = 'gmfm', save_freq = 50, max_steps = 120):
 		xref = jnp.array([-8.4853,-8.4853,27.00])
 		eval_policy_fn = eval_policy_lorenz
 	elif env == 'pendulum':
-		actor = init_pendulum_actor(beta =jnp.array([0.5,0.5]))
+		if init_actor == None:
+			actor = init_pendulum_actor(beta =jnp.array([0.5,0.5]), max_speed = max_speed)
+		else:
+			actor = init_actor
 		# y0 = jnp.array([jnp.pi,1])
 		# y0 = jnp.array([0.1,0.5])
 		y0 = jnp.array([jnp.pi,0.])
@@ -175,7 +179,7 @@ def main(env = 'gmfm', save_freq = 50, max_steps = 120):
 
 	#next train sparse actor
 	# max_iters =1000
-	max_iters =700
+	max_iters =1000
 	# l1_penalty = 0.0
 	beta_bounds = jnp.array([0,1])
 	# optimizer = optax.adabelief(1e-3)
@@ -185,7 +189,8 @@ def main(env = 'gmfm', save_freq = 50, max_steps = 120):
 	# params = {'a': actor.a, 'w':actor.w}
 	# print(f"hey: {params['beta']}")
 	opt_params = optimizer.init(params)
-	init_res = eval_policy_fn(params, actor.p,y0, xref, n_steps = max_steps)
+	init_res = eval_policy_fn(params, actor.p,y0, xref, n_steps = max_steps,
+		max_speed = max_speed, g = g)
 	# print("init res here:", init_res)
 	for i in range(max_iters):
 		key = jax.random.PRNGKey(i)
@@ -193,7 +198,8 @@ def main(env = 'gmfm', save_freq = 50, max_steps = 120):
 		# 	minval = jnp.array([-jnp.pi,-.5]), maxval = jnp.array([jnp.pi, .5]))
 		# print("rand_y0", rand_y0)
 		# grads = jax.grad(eval_policy_fn)(params, actor.p,rand_y0, xref, n_steps = 120)
-		grads = jax.grad(eval_policy_fn)(params, actor.p,y0, xref, n_steps = max_steps)
+		grads = jax.grad(eval_policy_fn)(params, actor.p,y0, xref, n_steps = max_steps,
+			max_speed = max_speed, g = g)
 		# grads = jax.grad(test_loss)(params)
 		# print("yo", grads)
 		updates,opt_params = optimizer.update(grads, opt_params)
@@ -218,7 +224,10 @@ def main(env = 'gmfm', save_freq = 50, max_steps = 120):
 			elif env == "lorenz":
 				f = open(out_path + "lorenz_sparse_actor=%d.pkl" % i ,"wb")
 			elif env == "pendulum":
-				f = open(out_path + "pendulum_sparse_actor=%d.pkl" % i, "wb")
+				if init_actor_iter_idx != None:
+					f = open(out_path + "pendulum_sparse_actor=%d.pkl" % (i + init_actor_iter_idx), "wb")
+				else:
+					f = open(out_path + "pendulum_sparse_actor=%d.pkl" % i, "wb")
 			actor_info={}
 			actor_info['a'] = params['a']
 			actor_info['w'] = params['w']
@@ -227,6 +236,8 @@ def main(env = 'gmfm', save_freq = 50, max_steps = 120):
 			actor_info['gamma'] = actor.gamma
 			actor_info['y0'] = y0
 			actor_info['max_steps'] = max_steps
+			actor_info['max_speed'] = max_speed
+			actor_info['g'] = g
 			pickle.dump(actor_info,f)
 			f.close()
 
@@ -236,5 +247,5 @@ def main(env = 'gmfm', save_freq = 50, max_steps = 120):
 if __name__ == '__main__':
 	t1 = time.time()
 	env = "pendulum"
-	main(env, max_steps = 130, g  = 9.8)
+	main(env, max_steps = 200, g  = 9.8, max_speed = 8.0)
 	print("this took %.1f seconds" % (time.time() - t1))
