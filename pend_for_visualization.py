@@ -183,7 +183,7 @@ class PendulumEnv(gym.Env):
         theta, thetadot = self.state
         return np.array([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
 
-    def render(self):
+    def render(self, state_th = None, u = None):
         if self.render_mode is None:
             gym.logger.warn(
                 "You are calling render method without specifying any render mode. "
@@ -225,7 +225,10 @@ class PendulumEnv(gym.Env):
         coords = [(l, b), (l, t), (r, t), (r, b)]
         transformed_coords = []
         for c in coords:
-            c = pygame.math.Vector2(c).rotate_rad(self.state[0] + np.pi / 2)
+            if state_th == None:
+                c = pygame.math.Vector2(c).rotate_rad(self.state[0] + np.pi / 2)
+            else:
+                c = pygame.math.Vector2(c).rotate_rad(state_th + np.pi / 2)
             c = (c[0] + offset, c[1] + offset)
             transformed_coords.append(c)
         gfxdraw.aapolygon(self.surf, transformed_coords, (204, 77, 77))
@@ -237,7 +240,10 @@ class PendulumEnv(gym.Env):
         )
 
         rod_end = (rod_length, 0)
-        rod_end = pygame.math.Vector2(rod_end).rotate_rad(self.state[0] + np.pi / 2)
+        if state_th == None:
+            rod_end = pygame.math.Vector2(rod_end).rotate_rad(self.state[0] + np.pi / 2)
+        else:
+            rod_end = pygame.math.Vector2(rod_end).rotate_rad(state_th + np.pi / 2)
         rod_end = (int(rod_end[0] + offset), int(rod_end[1] + offset))
         gfxdraw.aacircle(
             self.surf, rod_end[0], rod_end[1], int(rod_width / 2), (204, 77, 77)
@@ -248,12 +254,27 @@ class PendulumEnv(gym.Env):
 
         fname = path.join(path.dirname(__file__), "assets/clockwise.png")
         img = pygame.image.load(fname)
-        if self.last_u is not None:
+        if u == None: #if no state given, do the default visualization of trajectory as progressed via self.step
+            if self.last_u is not None:
+                scale_img = pygame.transform.smoothscale(
+                    img,
+                    (scale * np.abs(self.last_u) / 2, scale * np.abs(self.last_u) / 2),
+                )
+                is_flip = bool(self.last_u > 0)
+                scale_img = pygame.transform.flip(scale_img, is_flip, True)
+                self.surf.blit(
+                    scale_img,
+                    (
+                        offset - scale_img.get_rect().centerx,
+                        offset - scale_img.get_rect().centery,
+                    ),
+                )
+        else: #if u is given, just show the given u
             scale_img = pygame.transform.smoothscale(
                 img,
-                (scale * np.abs(self.last_u) / 2, scale * np.abs(self.last_u) / 2),
+                (scale * np.abs(u) / 2, scale * np.abs(u) / 2),
             )
-            is_flip = bool(self.last_u > 0)
+            is_flip = bool(u > 0)
             scale_img = pygame.transform.flip(scale_img, is_flip, True)
             self.surf.blit(
                 scale_img,
@@ -261,7 +282,7 @@ class PendulumEnv(gym.Env):
                     offset - scale_img.get_rect().centerx,
                     offset - scale_img.get_rect().centery,
                 ),
-            )
+            )   
 
         # drawing axle
         gfxdraw.aacircle(self.surf, offset, offset, int(0.05 * scale), (0, 0, 0))
@@ -302,6 +323,36 @@ class PendulumEnv(gym.Env):
             print("self.state (time %d)"%t, self.state)
             t += 1
         self.render()
+        self.close()
+
+    def visualize_v2(self, states, cmd, seed = None, dt: float =None):
+        """
+        Visualize the movement associated to a sequence of states and correponding control variables
+        Note visualization is only of the th, not thdot
+        :param states: sequence of states given as np array
+        :param cmd: sequence of controls to be applied on the system given as an numpy array (first cmd is action at first state)
+        :param dt: time step to visualize the movement (default is to use the time step defined in the environment)
+        seed: random seed for noise in env (if any)
+        """
+        if dt is None:
+            dt = self.dt
+        self.render_mode = "human"
+        # self.reset(init_state = init_state)
+        # print("self.state", self.state)
+        t = 0
+        np.random.seed(seed)
+
+        for i in range(len(cmd)):
+            ctrl = cmd[i] #just a scalar should be okay for rendering
+            state_th = states[i][0]
+            self.render(state_th = state_th, u = ctrl)
+            time.sleep(dt)
+            # self.step(ctrl)
+            # print("self.state (time %d)"%t, self.state)
+            print("self.state (time %d)"%t, states[i])
+            print("self.action (time %d)"%t, ctrl)
+            t += 1
+        # self.render()
         self.close()
 
     def close(self):
