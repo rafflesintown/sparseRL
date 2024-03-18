@@ -46,7 +46,7 @@ def gmfm_forcing_dsdt(s,t,a, w,p,beta):
 	# pi_s  = 1 #just for testing
 
 	sigma = 0.1 - jnp.linalg.norm(s)**2
-	dsdt = jnp.empty(len(s))
+	dsdt = jnp.empty(4)
 	dsdt = dsdt.at[0].set(sigma * s[0] - s[1])
 	dsdt = dsdt.at[1].set(sigma * s[1] + s[0])
 	dsdt = dsdt.at[2].set(-0.1 * s[2] - jnp.pi * s[3])

@@ -34,7 +34,7 @@ def eval_policy(params,p ,y0 = jnp.ones(4),xref = jnp.zeros(2), gamma = 0.1, t =
 	J = policy_cost + l1_cost
 	# J = get_ode_res(gmfm_forcing_dsdt,t = t,y0 = y0, args = policy)
 	# print("res",J)
-	jax.debug.print("policy cost is {x} here, l1 cost = {s}", x = policy_cost, s = l1_cost)
+	# jax.debug.print("policy cost is {x} here, l1 cost = {s}", x = policy_cost, s = l1_cost)
 	return J
 
 def eval_policy_lorenz(params,p ,y0 = jnp.ones(3),xref = jnp.ones(3), gamma = 0.1, t = jnp.linspace(0, 21 * jnp.pi,501), l1_penalty = 0.01):
@@ -164,10 +164,10 @@ def init_pendulum_actor(beta  = jnp.array([0.5,0.5]), max_speed = 8., stabilize 
 
 
 def init_gmfm_actor(beta  = 0.1):
-	D1 = 8
-	D2 = 8
+	D1 = 50
+	D2 = 50
 	D = D1 * D2
-	s_bounds = [-0.4,0.4]
+	s_bounds = [-0.3,0.3]
 	p0 = jnp.empty((D,2))
 	s1 = jnp.linspace(s_bounds[0], s_bounds[1], D1)
 	s2 = jnp.linspace(s_bounds[0], s_bounds[1],D2)
@@ -185,8 +185,8 @@ def init_gmfm_actor(beta  = 0.1):
 	return actor
 
 
-def main(env = 'gmfm', save_freq = 50, max_steps = 200, max_speed = 8.0,g = 9.8, 
-	init_actor = None, init_actor_iter_idx = None, stabilize=False):
+def train_pendulum(env = 'gmfm', save_freq = 50, max_steps = 200, max_speed = 8.0,g = 9.8, 
+	init_actor = None, init_actor_iter_idx = None, stabilize=False, max_iters = 500):
 	#first init sparse actor
 	if env == 'gmfm':
 		actor = init_gmfm_actor(beta = 0.1)
@@ -223,7 +223,7 @@ def main(env = 'gmfm', save_freq = 50, max_steps = 200, max_speed = 8.0,g = 9.8,
 
 	#next train sparse actor
 	# max_iters =1000
-	max_iters =1000
+	# max_iters =1000
 	# l1_penalty = 0.0
 	beta_bounds = jnp.array([0,1])
 	# optimizer = optax.adabelief(1e-3)
@@ -289,36 +289,76 @@ def main(env = 'gmfm', save_freq = 50, max_steps = 200, max_speed = 8.0,g = 9.8,
 			pickle.dump(actor_info,f)
 			f.close()
 
+# Output: trained policy for environment (default gmfm) after K (= max_iters) iterations
+def train(env = 'gmfm', print_freq = 50, max_iters = 500):
+    #first init sparse actor
+    if env == 'gmfm':
+        actor = init_gmfm_actor(beta = 0.1)
+        y0 = jnp.array([0.3162,0.0051,0,0])
+        a_bounds = jnp.array([-1,1])
+        xref = jnp.array([0,0])
+        eval_policy_fn = eval_policy
+        xref = jnp.array([0,0])
 
+    #next train sparse actor
+    beta_bounds = jnp.array([0,1])
+    optimizer = optax.adabelief(1e-3)
+    params = {'a': actor.a, 'w':actor.w, 'beta': actor.beta}
+    opt_params = optimizer.init(params)
+    init_res = eval_policy_fn(params, actor.p,y0, xref)
+    for i in range(max_iters):
+        grads = jax.grad(eval_policy_fn)(params, actor.p,y0, xref)
+        updates,opt_params = optimizer.update(grads, opt_params)
+        params = optax.apply_updates(params,updates)
+        params['a'] = jnp.where(params['a'] < a_bounds[0], a_bounds[0], params['a'])
+        params['a'] = jnp.where(params['a'] > a_bounds[1], a_bounds[1], params['a'])
+        params['w'] = jnp.where(params['w'] < 0, 0, params['w'])
+        params['w'] = jnp.where(params['w'] > 1, 1, params['w'])
+        params['beta'] = jnp.where(params['beta'] < 0.001, 0.001, params['beta'])
+
+        if i % print_freq == 0 or i == max_iters - 1:
+            print(f"iter{i} done, cost is: ", eval_policy_fn(params,actor.p,y0,xref))
+            
+    a = params['a']
+    w = params['w']
+    p = actor.p
+    beta = params['beta']
+    actor = sparse_actor(a,w,p,beta)
+    return(actor)
 
 
 if __name__ == '__main__':
 	t1 = time.time()
-	env = "pendulum"
+	# env = "pendulum"
+	env = 'gmfm'
 	stabilize = False
 	max_speed = 8.0
-	if stabilize == False:
-		main(env, max_steps = 200, g  = 9.8, max_speed = 8.0, stabilize = False)
-		# in_path = "policies/%s/" % env
-		# init_actor_iter_idx = 999
-		# file = open(in_path + 'pendulum_sparse_actor=%d.pkl' % init_actor_iter_idx, 'rb')
-		# actor = pickle.load(file)
-		# file.close()
-		# init_actor = sparse_actor(actor['a'],actor['w'], actor['p'], 
-		# 	beta = actor['beta'], gamma = actor['gamma'])
-		# main(env, max_steps = 200, g  = 9.8, max_speed = 8.0, init_actor = init_actor,
-		# 	init_actor_iter_idx = init_actor_iter_idx, stabilize = False)
-	else:
-		main(env, max_steps = 1, g  = 9.8, max_speed = 8.0, stabilize = True)
-		# in_path = "policies/%s/stabilize=%d/" % (env, stabilize)
-		# init_actor_iter_idx = 1499
-		# file = open(in_path + 'pendulum_sparse_actor=%d_max_speed=%.1f.pkl' % (init_actor_iter_idx, max_speed), 'rb')
-		# actor = pickle.load(file)
-		# file.close()
-		# init_actor = sparse_actor(actor['a'],actor['w'], actor['p'], 
-		# 	beta = actor['beta'], gamma = actor['gamma'])
-		# main(env, max_steps = actor['max_steps'], g  = 9.8, max_speed = max_speed, init_actor = init_actor,
-		# 	init_actor_iter_idx = init_actor_iter_idx, stabilize = True)
+	# if stabilize == False:
+	# 	main(env, max_steps = 200, g  = 9.8, max_speed = 8.0, stabilize = False)
+	# 	# in_path = "policies/%s/" % env
+	# 	# init_actor_iter_idx = 999
+	# 	# file = open(in_path + 'pendulum_sparse_actor=%d.pkl' % init_actor_iter_idx, 'rb')
+	# 	# actor = pickle.load(file)
+	# 	# file.close()
+	# 	# init_actor = sparse_actor(actor['a'],actor['w'], actor['p'], 
+	# 	# 	beta = actor['beta'], gamma = actor['gamma'])
+	# 	# main(env, max_steps = 200, g  = 9.8, max_speed = 8.0, init_actor = init_actor,
+	# 	# 	init_actor_iter_idx = init_actor_iter_idx, stabilize = False)
+	# else:
+	# 	main(env, max_steps = 1, g  = 9.8, max_speed = 8.0, stabilize = True)
+	# 	# in_path = "policies/%s/stabilize=%d/" % (env, stabilize)
+	# 	# init_actor_iter_idx = 1499
+	# 	# file = open(in_path + 'pendulum_sparse_actor=%d_max_speed=%.1f.pkl' % (init_actor_iter_idx, max_speed), 'rb')
+	# 	# actor = pickle.load(file)
+	# 	# file.close()
+	# 	# init_actor = sparse_actor(actor['a'],actor['w'], actor['p'], 
+	# 	# 	beta = actor['beta'], gamma = actor['gamma'])
+	# 	# main(env, max_steps = actor['max_steps'], g  = 9.8, max_speed = max_speed, init_actor = init_actor,
+	# 	# 	init_actor_iter_idx = init_actor_iter_idx, stabilize = True)
+
+	train(env)
+
+
 	print("this took %.1f seconds" % (time.time() - t1))
 
 
